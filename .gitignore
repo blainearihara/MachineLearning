@@ -1,0 +1,30 @@
+# ---- Python build artifacts ----
+__pycache__/
+*.py[cod]
+
+# ---- Profiler output ----
+*.prof
+.prof
+
+# ---- Datasets (re-downloadable; too large for GitHub) ----
+ML_Sandbox/MNIST/
+ML_Sandbox/cifar-10-batches-py/
+*.tar.gz
+*-ubyte
+*-ubyte.gz
+
+# ---- Trained model weights / checkpoints ----
+*.pt
+*.pth
+*.ckpt
+*.h5
+
+# ---- Jupyter / editor clutter ----
+.ipynb_checkpoints/
+.vscode/
+.idea/
+
+# ---- OS clutter ----
+Thumbs.db
+desktop.ini
+.DS_Store

@@ -26,25 +26,34 @@ class Node():
         self.value = value
 
 class DecisionTreeClassifier():
-    def __init__(self, min_samp_split=2, max_depth=2):
+    def __init__(self, min_samp_split=2, max_depth=2, criterion='gini'):
         # initialize root of the tree
         self.root = None
-        
-        # stopping conditions
+
+        # stopping conditions (max_depth=None means no depth limit)
         self.min_samp_split = min_samp_split
         self.max_depth = max_depth
-        
+
+        # impurity measure used to score splits: 'gini' or 'entropy'
+        if criterion not in ('gini', 'entropy'):
+            raise ValueError("criterion must be 'gini' or 'entropy'")
+        self.criterion = criterion
+
     def build_tree(self, dataset, curr_depth=0):
         # recurrsive function to build the tree
         X, Y = dataset[:,:-1], dataset[:,-1]
         num_samp, num_feat = np.shape(X)
-        
+
         # split until stopping conditions are met
-        if num_samp>=self.min_samp_split and curr_depth<=self.max_depth:
+        # (strict '<' so that a tree never grows deeper than max_depth)
+        depth_ok = self.max_depth is None or curr_depth < self.max_depth
+        if num_samp>=self.min_samp_split and depth_ok:
             # find the best split
             best_split = self.get_best_split(dataset, num_samp, num_feat)
             # check if information gain is positive
-            if best_split['info_gain']>0:
+            # (best_split is empty when no threshold separates the samples,
+            #  e.g. all rows are identical; the node then becomes a leaf)
+            if best_split.get('info_gain', -float('inf'))>0:
                 # recur left
                 left_subtree = self.build_tree(best_split['dataset_left'], curr_depth+1)
                 # recur right
@@ -75,7 +84,7 @@ class DecisionTreeClassifier():
                 if len(dataset_left)>0 and len(dataset_right)>0:
                     y, left_y, right_y = dataset[:, -1], dataset_left[:, -1], dataset_right[:, -1]
                     # compute information gain
-                    curr_info_gain = self.information_gain(y, left_y, right_y, 'gini')
+                    curr_info_gain = self.information_gain(y, left_y, right_y, self.criterion)
                     # update best split if needed
                     if curr_info_gain>max_info_gain:
                         best_split['feature_index'] = feature_index
@@ -119,11 +128,12 @@ class DecisionTreeClassifier():
         return 1 - gini
     
     def calculate_leaf_value(self, y):
-        y = list(y)
-        return max(y, key=y.count)
-    
+        # majority class; ties go to the smallest label (independent of sample order)
+        class_labels, counts = np.unique(y, return_counts=True)
+        return class_labels[np.argmax(counts)]
+
     def print_tree(self, tree=None, indent='    '):
-        if not tree:
+        if tree is None:
             tree = self.root
             
         if tree.value is not None:
@@ -136,15 +146,28 @@ class DecisionTreeClassifier():
             self.print_tree(tree.right, indent + indent)
         
     def fit(self, X, Y):
+        X = np.asarray(X)
+        Y = np.asarray(Y)
+        # accept labels as a 1-D vector or as a column vector
+        if Y.ndim == 1:
+            Y = Y.reshape(-1, 1)
+        if X.ndim != 2 or Y.shape != (X.shape[0], 1):
+            raise ValueError("X must be 2-D (n, m) and Y must have n labels")
+        if X.shape[0] == 0:
+            raise ValueError("cannot fit a tree to an empty data set")
+        # non-numeric labels (e.g. NumPy strings) are stored as Python objects so that
+        # concatenating them with X does not turn the features into strings
+        if Y.dtype.kind not in 'biuf':
+            Y = Y.astype(object)
         dataset = np.concatenate((X, Y), axis=1)
         self.root = self.build_tree(dataset)
-    
+
     def predict(self, X):
         preditions = [self.make_prediction(x, self.root) for x in X]
         return preditions
-    
+
     def make_prediction(self, x, tree):
-        if tree.value!=None:
+        if tree.value is not None:
             return tree.value
         
         feature_val = x[tree.feature_index]
